@@ -1,0 +1,47 @@
+{
+  "name": "Bitbucket Runner",
+  "slug": "bitbucket-runner-vm",
+  "categories": [20],
+  "date_created": "2026-08-25",
+  "type": "vm",
+  "updateable": false,
+  "privileged": false,
+  "architectures": ["amd64"],
+  "interface_port": null,
+  "documentation": "https://support.atlassian.com/bitbucket-cloud/docs/configure-a-self-hosted-runner/",
+  "website": "https://bitbucket.org/",
+  "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/bitbucket.webp",
+  "description": "Bitbucket Runner is a minimal base virtual machine (Debian 13 or Ubuntu 24.04) prepared for running a Bitbucket self-hosted runner. The runner software is not pre-installed; you install and configure it after first boot using your repository's runner setup token.",
+  "install_methods": [
+    {
+      "type": "default",
+      "script": "vm/bitbucket-runner-vm.sh",
+      "config_path": "",
+      "resources": {
+        "cpu": 2,
+        "ram": 8192,
+        "hdd": 20,
+        "os": null,
+        "version": null
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "notes": [
+    {
+      "text": "The Bitbucket self-hosted runner is NOT pre-installed. This is a minimal base VM; install and configure the runner after first boot using your repository's runner setup token.",
+      "type": "warning"
+    },
+    {
+      "text": "At least 8GB of RAM is recommended. The script warns if you select less than 8192 MiB.",
+      "type": "info"
+    },
+    {
+      "text": "Enable Cloud-Init during setup to configure SSH keys and network automatically.",
+      "type": "info"
+    }
+  ]
+}
