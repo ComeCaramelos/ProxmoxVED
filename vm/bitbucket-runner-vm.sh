@@ -3,7 +3,7 @@
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/community-scripts/ProxmoxVED/raw/main/LICENSE
-# Source: https://support.atlassian.com/bitbucket-cloud/docs/configure-a-self-hosted-runner/
+# Source: https://support.atlassian.com/bitbucket-cloud/docs/set-up-and-use-runners-for-linux/
 
 source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/pve/vm-core.func")
 source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_URL:-https://raw.githubusercontent.com/community-scripts/core/main}/vm/cloud-init.func") 2>/dev/null || true
@@ -12,22 +12,27 @@ load_functions
 function header_info {
   clear
   cat <<"EOF"
-    ____  _ __  __               __        __     ____                                 _    ____  ___
-   / __ )(_) /_/ /_  __  _______/ /_____  / /_   / __ \__  ______  ____  ___  _____   | |  / /  |/  /
-  / __  / / __/ __ \/ / / / ___/ //_/ _ \/ __/  / /_/ / / / / __ \/ __ \/ _ \/ ___/   | | / / /|_/ /
- / /_/ / / /_/ /_/ / /_/ / /__/ ,< /  __/ /_   / _, _/ /_/ / / / / / / /  __/ /       | |/ / /  / /
-/_____/_/\__/_.___/\__,_/\___/_/|_|\___/\__/  /_/ |_|\__,_/_/ /_/_/ /_/\___/_/        |___/_/  /_/
+    ____  _ __  __               __        __     ____
+   / __ )(_) /_/ /_  __  _______/ /_____  / /_   / __ \__  ______  ____  ___  _____
+  / __  / / __/ __ \/ / / / ___/ //_/ _ \/ __/  / /_/ / / / / __ \/ __ \/ _ \/ ___/
+ / /_/ / / /_/ /_/ / /_/ / /__/ ,< /  __/ /_   / _, _/ /_/ / / / / / / /  __/ /
+/_____/_/\__/_.___/\__,_/\___/_/|_|\___/\__/  /_/ |_|\__,_/_/ /_/_/ /_/\___/_/
 EOF
 }
 
-APP="Bitbucket Runner VM"
+APP="Bitbucket Runner"
 APP_TYPE="vm"
 GEN_MAC=02:$(openssl rand -hex 5 | awk '{print toupper($0)}' | sed 's/\(..\)/\1:/g; s/.$//')
 RANDOM_UUID="$(cat /proc/sys/kernel/random/uuid)"
 METHOD=""
-NSAPP="bitbucket-runner-vm"
+NSAPP="bitbucket-runner"
 THIN="discard=on,ssd=1,"
 USE_CLOUD_INIT="no"
+BB_ACCOUNT_UUID=""
+BB_REPOSITORY_UUID=""
+BB_RUNNER_UUID=""
+BB_OAUTH_CLIENT_ID=""
+BB_OAUTH_CLIENT_SECRET=""
 
 # OS selection defaults
 OS_CHOICE="debian13"
@@ -164,6 +169,96 @@ function start_script() {
 start_script
 
 # ---------------------------------------------------------------------------
+# Runner credentials (shown only once in the Bitbucket UI)
+# ---------------------------------------------------------------------------
+function prompt_runner_credentials() {
+  msg_info "Runner credentials"
+  stop_spinner
+  echo -e "${INFO}${BOLD}${DGN}Where to find these values:${CL}"
+  echo -e "${TAB}Bitbucket UI -> Workspace settings -> Workspace runners"
+  echo -e "${TAB}(or repo Settings -> Runners) -> Add runner -> 'Run step'."
+  echo -e "${TAB}Read the values from the -e flags of the docker command."
+  echo -e "${YWB}These values are shown only ONCE - save them now!${CL}"
+
+  while true; do
+    if BB_ACCOUNT_UUID=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "RUNNER CREDENTIALS" \
+      --inputbox "Account UUID (from the -e ACCOUNT_UUID=... flag):" 8 65 "" \
+      --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
+      if [[ -z "$BB_ACCOUNT_UUID" ]]; then
+        whiptail --backtitle "Proxmox VE Helper Scripts" --title "RUNNER CREDENTIALS" \
+          --msgbox "Account UUID is required." 8 50
+        continue
+      fi
+      echo -e "${INFO}${BOLD}${DGN}Account UUID: ${BGN}${BB_ACCOUNT_UUID}${CL}"
+      break
+    else
+      exit_script
+    fi
+  done
+
+  while true; do
+    if BB_REPOSITORY_UUID=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "RUNNER CREDENTIALS" \
+      --inputbox "Repository UUID (from the -e REPOSITORY_UUID=... flag).\nLeave empty for workspace runners:" 9 65 "" \
+      --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
+      echo -e "${INFO}${BOLD}${DGN}Repository UUID: ${BGN}${BB_REPOSITORY_UUID:-<empty>}${CL}"
+      break
+    else
+      exit_script
+    fi
+  done
+
+  while true; do
+    if BB_RUNNER_UUID=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "RUNNER CREDENTIALS" \
+      --inputbox "Runner UUID (from the -e RUNNER_UUID=... flag):" 8 65 "" \
+      --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
+      if [[ -z "$BB_RUNNER_UUID" ]]; then
+        whiptail --backtitle "Proxmox VE Helper Scripts" --title "RUNNER CREDENTIALS" \
+          --msgbox "Runner UUID is required." 8 50
+        continue
+      fi
+      echo -e "${INFO}${BOLD}${DGN}Runner UUID: ${BGN}${BB_RUNNER_UUID}${CL}"
+      break
+    else
+      exit_script
+    fi
+  done
+
+  while true; do
+    if BB_OAUTH_CLIENT_ID=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "RUNNER CREDENTIALS" \
+      --inputbox "OAuth Client ID (from the -e OAUTH_CLIENT_ID=... flag):" 8 65 "" \
+      --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
+      if [[ -z "$BB_OAUTH_CLIENT_ID" ]]; then
+        whiptail --backtitle "Proxmox VE Helper Scripts" --title "RUNNER CREDENTIALS" \
+          --msgbox "OAuth Client ID is required." 8 50
+        continue
+      fi
+      echo -e "${INFO}${BOLD}${DGN}OAuth Client ID: ${BGN}${BB_OAUTH_CLIENT_ID}${CL}"
+      break
+    else
+      exit_script
+    fi
+  done
+
+  while true; do
+    if BB_OAUTH_CLIENT_SECRET=$(whiptail --backtitle "Proxmox VE Helper Scripts" --title "RUNNER CREDENTIALS" \
+      --passwordbox "OAuth Client Secret (from the -e OAUTH_CLIENT_SECRET=... flag):" 8 65 \
+      --cancel-button Exit-Script 3>&1 1>&2 2>&3); then
+      if [[ -z "$BB_OAUTH_CLIENT_SECRET" ]]; then
+        whiptail --backtitle "Proxmox VE Helper Scripts" --title "RUNNER CREDENTIALS" \
+          --msgbox "OAuth Client Secret is required." 8 50
+        continue
+      fi
+      echo -e "${INFO}${BOLD}${DGN}OAuth Client Secret: ${BGN}********${CL}"
+      break
+    else
+      exit_script
+    fi
+  done
+}
+
+prompt_runner_credentials
+
+# ---------------------------------------------------------------------------
 # RAM warning: Bitbucket Runner works best with at least 8GB
 # ---------------------------------------------------------------------------
 if [[ "$RAM_SIZE" -lt 8192 ]]; then
@@ -185,7 +280,13 @@ DISK_IMPORT="-format ${DISK_IMPORT_FORMAT}"
 # ---------------------------------------------------------------------------
 case "$OS_CHOICE" in
 ubuntu2404) URL="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img" ;;
-debian13) URL="https://cloud.debian.org/images/cloud/trixie/daily/latest/debian-13-generic-amd64.qcow2" ;;
+debian13)
+  if [ "$USE_CLOUD_INIT" = "yes" ]; then
+    URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2"
+  else
+    URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-nocloud-amd64.qcow2"
+  fi
+  ;;
 esac
 
 msg_info "Retrieving the URL for the ${OS_LABEL} Cloud Image"
@@ -204,13 +305,145 @@ else
   msg_ok "Using cached image ${CL}${BL}$(basename "$CACHE_FILE")${CL}"
 fi
 
-FILE="$CACHE_FILE"
+# ---------------------------------------------------------------------------
+# Image customization (Docker + Bitbucket Runner)
+# ---------------------------------------------------------------------------
+if ! command -v virt-customize &>/dev/null; then
+  msg_info "Installing libguestfs-tools for virt-customize"
+  $STD apt install -y libguestfs-tools
+  msg_ok "Installed libguestfs-tools"
+fi
+
+msg_info "Customizing the ${OS_LABEL} image (Docker + Bitbucket Runner)"
+WORK_FILE=$(mktemp --suffix=.qcow2)
+cp "$CACHE_FILE" "$WORK_FILE"
+export LIBGUESTFS_BACKEND_SETTINGS=dns=8.8.8.8,1.1.1.1
+
+if ! virt-customize -q -a "$WORK_FILE" --install qemu-guest-agent,curl,ca-certificates >/dev/null 2>&1; then
+  msg_error "Failed to install base packages in the image"
+  exit 1
+fi
+
+if ! virt-customize -q -a "$WORK_FILE" --run-command "curl -fsSL https://get.docker.com | sh" >/dev/null 2>&1 ||
+  ! virt-customize -q -a "$WORK_FILE" --run-command "systemctl enable docker" >/dev/null 2>&1; then
+  msg_error "Failed to install Docker in the image"
+  exit 1
+fi
+
+# Atlassian best practices: no swap, low swappiness, weekly prune
+if ! virt-customize -q -a "$WORK_FILE" --run-command "sed -ri '/^[[:space:]]*#/!s/^[^#]*\sswap\s.*$//' /etc/fstab" >/dev/null 2>&1 ||
+  ! virt-customize -q -a "$WORK_FILE" --run-command "grep -q '^vm.swappiness' /etc/sysctl.conf || echo 'vm.swappiness = 1' >> /etc/sysctl.conf" >/dev/null 2>&1 ||
+  ! virt-customize -q -a "$WORK_FILE" --run-command "(crontab -l 2>/dev/null; echo '0 0 * * 0 docker system prune -af') | crontab -" >/dev/null 2>&1; then
+  msg_error "Failed to apply Atlassian best practices (swap/swappiness/prune) in the image"
+  exit 1
+fi
+
+# Upload runner credentials (host variables expanded into the image)
+BB_ENV_TMP=$(mktemp)
+cat >"$BB_ENV_TMP" <<ENVEOF
+ACCOUNT_UUID="${BB_ACCOUNT_UUID}"
+REPOSITORY_UUID="${BB_REPOSITORY_UUID}"
+RUNNER_UUID="${BB_RUNNER_UUID}"
+OAUTH_CLIENT_ID="${BB_OAUTH_CLIENT_ID}"
+OAUTH_CLIENT_SECRET="${BB_OAUTH_CLIENT_SECRET}"
+ENVEOF
+if ! virt-customize -q -a "$WORK_FILE" --upload "${BB_ENV_TMP}:/root/bitbucket-runner.env" >/dev/null 2>&1; then
+  msg_error "Failed to upload runner credentials to the image"
+  exit 1
+fi
+rm -f "$BB_ENV_TMP"
+
+# Upload first-boot setup script (no host variable expansion - single-quoted heredoc)
+BB_SETUP_TMP=$(mktemp)
+cat >"$BB_SETUP_TMP" <<'SETUPEOF'
+#!/bin/bash
+exec > /var/log/bitbucket-runner-setup.log 2>&1
+echo "[$(date)] Bitbucket Runner setup started"
+for i in {1..60}; do docker info >/dev/null 2>&1 && break; sleep 5; done
+set -a; source /root/bitbucket-runner.env; set +a
+docker pull docker-public.packages.atlassian.com/sox/atlassian/bitbucket-pipelines-runner
+docker container rm -f bitbucket-runner 2>/dev/null || true
+docker run -d --restart unless-stopped --name bitbucket-runner \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
+  -v /tmp:/tmp \
+  -e ACCOUNT_UUID="$ACCOUNT_UUID" \
+  -e REPOSITORY_UUID="$REPOSITORY_UUID" \
+  -e RUNNER_UUID="$RUNNER_UUID" \
+  -e OAUTH_CLIENT_ID="$OAUTH_CLIENT_ID" \
+  -e OAUTH_CLIENT_SECRET="$OAUTH_CLIENT_SECRET" \
+  -e WORKING_DIRECTORY=/tmp \
+  -e RUNTIME_PREREQUISITES_ENABLED=true \
+  docker-public.packages.atlassian.com/sox/atlassian/bitbucket-pipelines-runner
+echo "[$(date)] Bitbucket Runner setup finished"
+touch /root/.bitbucket-runner-setup-done
+SETUPEOF
+if ! virt-customize -q -a "$WORK_FILE" --upload "${BB_SETUP_TMP}:/root/bitbucket-runner-setup.sh" --run-command "chmod +x /root/bitbucket-runner-setup.sh" >/dev/null 2>&1; then
+  msg_error "Failed to upload the first-boot setup script to the image"
+  exit 1
+fi
+rm -f "$BB_SETUP_TMP"
+
+# Upload first-boot systemd service
+BB_SVC_TMP=$(mktemp)
+cat >"$BB_SVC_TMP" <<'SVCEOF'
+[Unit]
+Description=Bitbucket Pipelines Runner first-boot setup
+After=network-online.target docker.service
+Wants=network-online.target
+ConditionPathExists=!/root/.bitbucket-runner-setup-done
+
+[Service]
+Type=oneshot
+ExecStart=/root/bitbucket-runner-setup.sh
+TimeoutStartSec=600
+StandardOutput=journal+console
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+if ! virt-customize -q -a "$WORK_FILE" --upload "${BB_SVC_TMP}:/etc/systemd/system/bitbucket-runner-setup.service" --run-command "systemctl enable bitbucket-runner-setup.service" >/dev/null 2>&1; then
+  msg_error "Failed to upload the first-boot setup service to the image"
+  exit 1
+fi
+rm -f "$BB_SVC_TMP"
+
+msg_info "Finalizing image (hostname, SSH config)"
+virt-customize -q -a "$WORK_FILE" --hostname "${HN}" >/dev/null 2>&1 || true
+virt-customize -q -a "$WORK_FILE" --run-command "truncate -s 0 /etc/machine-id" >/dev/null 2>&1 || true
+virt-customize -q -a "$WORK_FILE" --run-command "rm -f /var/lib/dbus/machine-id" >/dev/null 2>&1 || true
+
+# Configure SSH for Cloud-Init
+if [ "$USE_CLOUD_INIT" = "yes" ]; then
+  virt-customize -q -a "$WORK_FILE" --run-command "sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config" >/dev/null 2>&1 || true
+  virt-customize -q -a "$WORK_FILE" --run-command "sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config" >/dev/null 2>&1 || true
+else
+  # Configure auto-login for nocloud images (no Cloud-Init)
+  virt-customize -q -a "$WORK_FILE" --run-command "mkdir -p /etc/systemd/system/serial-getty@ttyS0.service.d" >/dev/null 2>&1 || true
+  virt-customize -q -a "$WORK_FILE" --run-command 'cat > /etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf << EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear %I \$TERM
+EOF' >/dev/null 2>&1 || true
+  virt-customize -q -a "$WORK_FILE" --run-command "mkdir -p /etc/systemd/system/getty@tty1.service.d" >/dev/null 2>&1 || true
+  virt-customize -q -a "$WORK_FILE" --run-command 'cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear %I \$TERM
+EOF' >/dev/null 2>&1 || true
+fi
+msg_ok "Finalized image"
+
+FILE="$WORK_FILE"
+msg_ok "Docker + Bitbucket Runner pre-installed in the image"
 
 msg_info "Creating a ${OS_LABEL} Bitbucket Runner VM"
 qm create $VMID -agent 1${MACHINE} -tablet 0 -localtime 1 -bios ovmf${CPU_TYPE} -cores $CORE_COUNT -memory $RAM_SIZE \
   -name $HN -tags community-script -net0 virtio,bridge=$BRG,macaddr=$MAC$VLAN$MTU -onboot 1 -ostype l26 -scsihw virtio-scsi-pci
 pvesm alloc $STORAGE $VMID $DISK0 4M 1>&/dev/null
 qm importdisk $VMID $FILE $STORAGE ${DISK_IMPORT:-} 1>&/dev/null
+rm -f "$WORK_FILE" 2>/dev/null || true
 qm set $VMID \
   -efidisk0 ${DISK0_REF}${FORMAT} \
   -scsi0 ${DISK1_REF},${DISK_CACHE}${THIN}size=${DISK_SIZE} \
@@ -243,20 +476,39 @@ fi
 post_update_to_api "done" "none"
 msg_ok "Completed successfully!\n"
 
-cat <<'INSTRUCTIONS'
+# Access line depends on the user's Cloud-Init choice (not on success/failure)
+if [ "$USE_CLOUD_INIT" = "yes" ]; then
+  BB_ACCESS="Cloud-Init user and password are shown below.                  │"
+else
+  BB_ACCESS="root auto-login on the serial console (ttyS0) or on tty1.      │"
+fi
+
+cat <<INSTRUCTIONS
 
   ┌─────────────────────────────────────────────────────────────────────────┐
-  │               BITBUCKET RUNNER - BASE VM READY                          │
+  │                    BITBUCKET RUNNER VM - READY                          │
   ├─────────────────────────────────────────────────────────────────────────┤
-  │  This is a minimal base VM. The Bitbucket self-hosted runner is NOT     │
-  │  pre-installed. After first boot, log in and install the runner:        │
+  │  Docker and the Bitbucket self-hosted runner are pre-installed in       │
+  │  the image. The runner is configured ONLY on first boot (service        │
+  │  bitbucket-runner-setup).                                               │
   │                                                                         │
-  │    1. Get your runner setup token from the Bitbucket repo settings.     │
-  │    2. Inside the VM, download and configure the runner:                 │
-  │         https://support.atlassian.com/bitbucket-cloud/docs/             │
-  │         configure-a-self-hosted-runner/                                 │
+  │  Access: ${BB_ACCESS}
   │                                                                         │
-  │  NOTE: 8GB+ RAM is recommended for smooth runner performance.           │
+  │  Verify after first boot:                                               │
+  │    - journalctl -u bitbucket-runner-setup -f                            │
+  │    - docker ps (container: bitbucket-runner)                            │
+  │    - The runner shows as ONLINE in the Bitbucket UI                     │
+  │                                                                         │
+  │  Setup log: /var/log/bitbucket-runner-setup.log                         │
+  │                                                                         │
+  │  Update the runner version:                                             │
+  │    docker pull docker-public.packages.atlassian.com/sox/atlassian/      │
+  │      bitbucket-pipelines-runner                                         │
+  │    docker container rm -f bitbucket-runner                              │
+  │    then re-run the SAME docker run command (tokens do not change).      │
+  │                                                                         │
+  │  Swap disabled, vm.swappiness=1 and weekly 'docker system prune -af'    │
+  │    cron job are already configured.                                     │
   └─────────────────────────────────────────────────────────────────────────┘
 
 INSTRUCTIONS

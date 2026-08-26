@@ -8,10 +8,10 @@
   "privileged": false,
   "architectures": ["amd64"],
   "interface_port": null,
-  "documentation": "https://support.atlassian.com/bitbucket-cloud/docs/configure-a-self-hosted-runner/",
+  "documentation": "https://support.atlassian.com/bitbucket-cloud/docs/set-up-and-use-runners-for-linux/",
   "website": "https://bitbucket.org/",
   "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/bitbucket.webp",
-  "description": "Bitbucket Runner is a minimal base virtual machine (Debian 13 or Ubuntu 24.04) prepared for running a Bitbucket self-hosted runner. The runner software is not pre-installed; you install and configure it after first boot using your repository's runner setup token.",
+  "description": "Bitbucket Pipelines self-hosted runner (Docker) pre-installed in a Debian 13 or Ubuntu 24.04 VM. Docker, swap tuning (vm.swappiness=1) and a weekly image prune are configured automatically; the runner container starts on first boot with the credentials you provide.",
   "install_methods": [
     {
       "type": "default",
@@ -32,15 +32,19 @@
   },
   "notes": [
     {
-      "text": "The Bitbucket self-hosted runner is NOT pre-installed. This is a minimal base VM; install and configure the runner after first boot using your repository's runner setup token.",
+      "text": "Runner credentials (ACCOUNT_UUID, REPOSITORY_UUID, RUNNER_UUID, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET) are shown ONLY ONCE in the Bitbucket UI (Workspace/Repo settings > Runners > Add runner > Run step). If lost, create a new runner to get a new command.",
       "type": "warning"
+    },
+    {
+      "text": "The VM automatically disables swap, sets vm.swappiness=1 and schedules a weekly 'docker system prune -af' (Atlassian best practice for runners).",
+      "type": "info"
     },
     {
       "text": "At least 8GB of RAM is recommended. The script warns if you select less than 8192 MiB.",
       "type": "info"
     },
     {
-      "text": "Enable Cloud-Init during setup to configure SSH keys and network automatically.",
+      "text": "The runner container uses '--restart unless-stopped' and survives VM reboots. Verify with 'docker ps' and 'journalctl -u bitbucket-runner-setup'.",
       "type": "info"
     }
   ]
