@@ -1,0 +1,91 @@
+{
+  "name": "Bitbucket-Runner",
+  "slug": "bitbucket-runner",
+  "categories": [
+    20
+  ],
+  "date_created": "2026-08-26",
+  "type": "ct",
+  "updateable": true,
+  "privileged": false,
+  "architectures": ["amd64"],
+  "interface_port": null,
+  "documentation": "https://support.atlassian.com/bitbucket-cloud/docs/set-up-runners-for-linux-shell/",
+  "website": "https://bitbucket.org/product/features/pipelines",
+  "repository": "https://bitbucket.org/product/features/pipelines",
+  "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/bitbucket.webp",
+  "description": "Self-hosted Bitbucket Pipelines runner (Linux Shell). Executes pipeline steps directly on the container without Docker, so you are not charged for build minutes. Requires OpenJDK 25 and Git; steps run as root on the host and share the build environment.",
+  "install_methods": [
+    {
+      "type": "default",
+      "script": "ct/bitbucket-runner.sh",
+      "config_path": "/opt/bitbucket-runner_data/runner.env",
+      "resources": {
+        "cpu": 2,
+        "ram": 8192,
+        "hdd": 20,
+        "os": "Debian",
+        "version": "13"
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "app_vars": [
+    {
+      "name": "var_account_uuid",
+      "label": "Account UUID",
+      "type": "text",
+      "required": true,
+      "help": "ACCOUNT_UUID from the runner setup command shown in the Bitbucket UI"
+    },
+    {
+      "name": "var_repository_uuid",
+      "label": "Repository UUID",
+      "type": "text",
+      "help": "REPOSITORY_UUID for a repository runner; leave empty for a workspace runner"
+    },
+    {
+      "name": "var_runner_uuid",
+      "label": "Runner UUID",
+      "type": "text",
+      "required": true,
+      "help": "RUNNER_UUID from the runner setup command shown in the Bitbucket UI"
+    },
+    {
+      "name": "var_oauth_client_id",
+      "label": "OAuth Client ID",
+      "type": "text",
+      "required": true,
+      "help": "OAuthClientId from the runner setup command shown in the Bitbucket UI"
+    },
+    {
+      "name": "var_oauth_client_secret",
+      "label": "OAuth Client Secret",
+      "type": "password",
+      "secret": true,
+      "required": true,
+      "help": "OAuthClientSecret from the runner setup command shown in the Bitbucket UI"
+    }
+  ],
+  "notes": [
+    {
+      "text": "The runner credentials (Account UUID, Runner UUID, OAuth Client ID/Secret) are shown only once in the Bitbucket runner setup dialog - copy them before finishing the setup, they cannot be retrieved again.",
+      "type": "warning"
+    },
+    {
+      "text": "This is the Linux Shell runner: steps execute directly on the container as root without Docker, so there is no clean build environment per step. Use the 'linux.shell' label in runs-on in your bitbucket-pipelines.yml. Service containers, Pipes and SSH keys are not supported.",
+      "type": "warning"
+    },
+    {
+      "text": "The runner needs outbound access to Atlassian endpoints and to AWS S3 (us-east-1) for artifacts and caches. If you use IP-based whitelisting, allow the S3 ranges from ip-ranges.amazonaws.com.",
+      "type": "info"
+    },
+    {
+      "text": "Build logs and caches persist in /opt/bitbucket-runner_data. The runner does not clean the cache folder after steps, so schedule a cleanup if it grows too large.",
+      "type": "info"
+    }
+  ]
+}
